@@ -53,6 +53,16 @@
     .foot{margin-top:12px; color:var(--muted); font-size:12px}
     .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:#0c0c12; border:1px solid #2a2a3b; border-radius:8px; padding:2px 6px; font-size:12px}
     .hidden{display:none}
+    .modal{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:#0008; z-index:50}
+  .modal.show{display:flex}
+  .pass{width:360px; background:linear-gradient(180deg,#12122a,#0f0f1e); border:1px solid #2a2a3b; border-radius:24px; padding:16px; color:#eaeaf5; box-shadow:0 20px 60px #000a}
+  .pass .hdr{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+  .air{font-weight:800; letter-spacing:1px}
+  .pass .meta{font-size:12px; color:#b9bbcf}
+  .bp-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0}
+  .bp-card{background:#0c0c16; border:1px solid #23233a; border-radius:12px; padding:10px}
+  .qr-wrap{display:flex; align-items:center; justify-content:center; background:#0c0c16; border:1px dashed #2b2b3d; border-radius:12px; padding:12px}
+  .modal .actions{display:flex; gap:10px; margin-top:12px}
   </style>
 </head>
 <body>
@@ -104,6 +114,31 @@
       </form>
     </section>
 
+    <!-- Boarding Pass Modal -->
+    <div class="modal" id="bpModal" aria-hidden="true">
+      <div class="pass" id="passCard">
+        <div class="hdr">
+          <div class="air">✈︎ BOARDING PASS</div>
+          <span class="spacer"></span>
+          <span class="badge" id="bpCode">—</span>
+        </div>
+        <div class="meta" id="bpName">Name —</div>
+        <div class="meta" id="bpEvent">Event —</div>
+        <div class="bp-grid">
+          <div class="bp-card"><div class="hint">Seat</div><div id="bpSeat" style="font-weight:700; font-size:18px">—</div></div>
+          <div class="bp-card"><div class="hint">Gate</div><div id="bpGate" style="font-weight:700; font-size:18px">—</div></div>
+          <div class="bp-card"><div class="hint">Date</div><div id="bpDate" style="font-weight:700; font-size:18px">—</div></div>
+          <div class="bp-card"><div class="hint">Time</div><div id="bpTime" style="font-weight:700; font-size:18px">—</div></div>
+        </div>
+        <div class="qr-wrap"><div id="qr"></div></div>
+        <div class="actions">
+          <button class="btn primary" id="downloadPng">Download PNG</button>
+          <button class="btn" id="closeBp">Close</button>
+        </div>
+        <p class="foot">Tip: add the PNG to your Photos/Files. For Apple Wallet you need a signed .pkpass (server‑side). We can add that later.</p>
+      </div>
+    </div>
+
     <!-- Admin / Guest List Card -->
     <section class="card" id="adminCard">
       <div class="flex">
@@ -126,6 +161,17 @@
           <button class="btn" id="exportCsv">Export CSV</button>
           <button class="btn" id="clearAll" title="Danger: delete everything">Clear All</button>
         </div>
+        <!-- Google Sheets sync controls -->
+        <div class="flex" style="gap:8px; flex-wrap:wrap; margin:6px 0 14px">
+          <input id="sheetId" placeholder="Google Sheet ID" style="min-width:320px" />
+          <input id="sheetName" placeholder="Sheet name (e.g., Sheet1)" style="width:180px" />
+          <button class="btn" id="connectG" title="Sign in with Google & enable Sheets API">Connect Google</button>
+          <button class="btn" id="syncNow" title="Write all RSVPs to the sheet">Sync now</button>
+          <button class="btn" id="importNow" title="Load RSVPs from the sheet (overwrites local)">Import</button>
+          <label class="badge" title="Automatically sync after changes">
+            <input type="checkbox" id="autoSyncChk" style="margin-right:6px">Auto‑sync
+          </label>
+        </div>
         <div style="overflow:auto; max-height:520px; border:1px solid #2a2a3b; border-radius:14px">
           <table id="table">
             <thead>
@@ -145,6 +191,21 @@
         </div>
         <p class="foot">Tip: press <span class="kbd">/</span> to focus search · press <span class="kbd">E</span> to export CSV</p>
       </div>
+    </section>
+
+    <!-- Diagnostics -->
+    <section class="card">
+      <div class="flex">
+        <h3 style="margin:0">Diagnostics</h3>
+        <span class="spacer"></span>
+        <button class="btn" id="runTests">Run tests</button>
+      </div>
+      <p class="sub">Quick checks to ensure libraries are loaded and core flows work.</p>
+      <ul class="hint">
+        <li>Test 1: <span class="kbd">QRCode</span> available</li>
+        <li>Test 2: <span class="kbd">html2canvas</span> available</li>
+        <li>Test 3: Generate a sample boarding pass (no save)</li>
+      </ul>
     </section>
   </div>
 
@@ -333,6 +394,208 @@
 
   // First paint
   refresh();
+
+  // ===== Boarding pass logic =====
+  const bpModal = document.getElementById('bpModal');
+  const passCard = document.getElementById('passCard');
+  const bpName = document.getElementById('bpName');
+  const bpEvent = document.getElementById('bpEvent');
+  const bpSeat = document.getElementById('bpSeat');
+  const bpGate = document.getElementById('bpGate');
+  const bpDate = document.getElementById('bpDate');
+  const bpTime = document.getElementById('bpTime');
+  const bpCode = document.getElementById('bpCode');
+  const dlPng = document.getElementById('downloadPng');
+  const closeBp = document.getElementById('closeBp');
+
+  // Ensure external libs are loaded before use
+  function loadScriptOnce(src){
+    return new Promise((resolve, reject)=>{
+      if(document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.async = true;
+      s.onload = resolve; s.onerror = ()=>reject(new Error('Failed to load '+src));
+      document.body.appendChild(s);
+    });
+  }
+  async function ensureLibs(){
+    if(!window.QRCode){ await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js'); }
+    if(!window.html2canvas){ await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'); }
+  }
+
+  function randomSeat(){
+    const row = Math.floor(Math.random()*30)+1; const col = 'ABCDEF'[Math.floor(Math.random()*6)]; return `${row}${col}`;
+  }
+  function randomGate(){ return String.fromCharCode(65+Math.floor(Math.random()*6)) + (Math.floor(Math.random()*19)+1); }
+  function formatDt(d){ const dt=new Date(d); return {d:dt.toLocaleDateString(), t:dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}; }
+
+  // show pass for a record
+  async function showPass(rec){
+    try{
+      await ensureLibs();
+      const code = (rec.id||'').slice(0,8).toUpperCase();
+      const now = new Date();
+      const ft = formatDt(now);
+      bpName.textContent = rec.name;
+      bpEvent.textContent = 'Event: RSVP Guest List';
+      bpSeat.textContent = randomSeat();
+      bpGate.textContent = randomGate();
+      bpDate.textContent = ft.d;
+      bpTime.textContent = ft.t;
+      bpCode.textContent = code;
+
+      const payload = JSON.stringify({id:rec.id, name:rec.name, t:Date.now()});
+      const qrEl = document.getElementById('qr'); qrEl.innerHTML='';
+      // prefer canvas API if available
+      if(window.QRCode && QRCode.toCanvas){
+        await QRCode.toCanvas(payload, {width:180, margin:1}).then(cv=>{ qrEl.appendChild(cv); });
+      }else if(window.QRCode){
+        // fallback older API
+        new QRCode(qrEl, { text: payload, width:180, height:180 });
+      }else{
+        qrEl.textContent = 'QR library unavailable';
+      }
+      bpModal.classList.add('show');
+    }catch(err){
+      console.error(err);
+      alert('Could not generate boarding pass (libraries failed to load). Please check your internet connection and try again.');
+    }
+  }
+
+  // close + download
+  closeBp?.addEventListener('click', ()=> bpModal.classList.remove('show'));
+  dlPng?.addEventListener('click', async ()=>{
+    await ensureLibs();
+    const canvas = await html2canvas(passCard, {backgroundColor:null, scale:2});
+    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`boarding-pass-${bpCode.textContent}.png`; a.click(); URL.revokeObjectURL(a.href); });
+  });
+    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`boarding-pass-${bpCode.textContent}.png`; a.click(); URL.revokeObjectURL(a.href); });
+  });
+
+  // Hook: after RSVP "Yes" generate the pass immediately
+  let lastCreatedAt = 0;
+  const _save2 = save;
+  save = function(){
+    _save2();
+    if(state.records.length){
+      const r0 = state.records[0];
+      if(r0.createdAt && r0.createdAt !== lastCreatedAt && r0.attending==='Yes'){
+        lastCreatedAt = r0.createdAt;
+        showPass(r0);
+      }
+    }
+  }
+
+  // Diagnostics tests
+  document.getElementById('runTests')?.addEventListener('click', async ()=>{
+    const results = [];
+    try{ await ensureLibs(); results.push('QRCode loaded: '+!!window.QRCode); }catch{ results.push('QRCode loaded: false'); }
+    results.push('html2canvas loaded: '+!!window.html2canvas);
+    try{
+      // Create a fake pass without saving
+      await showPass({ id: crypto.randomUUID(), name: 'Test User' });
+      results.push('Boarding pass render: OK');
+    }catch(e){ results.push('Boarding pass render: FAIL'); }
+    alert(results.join('\n'));
+  });
+
+  </script>  <script src="https://apis.google.com/js/api.js"></script>
+  <script>
+  // ---- Google Sheets sync ----
+  const GS = {
+    API_KEY: 'AIzaSyD1SGR5BmVuC2yHGs0M3N_7Yxk9UZiz21k',
+    CLIENT_ID: '451791494394-19319a5lqeflv7ib0iirkfpsar3faqb0.apps.googleusercontent.com',
+    SCOPE: 'https://www.googleapis.com/auth/spreadsheets',
+    SHEET_ID: localStorage.getItem('sheetId')||'',
+    SHEET_NAME: localStorage.getItem('sheetName')||'Sheet1',
+    autosync: localStorage.getItem('autosync')==='1'
+  };
+  const sheetInputs = { id: document.getElementById('sheetId'), name: document.getElementById('sheetName'), auto: document.getElementById('autoSyncChk') };
+  const gBtns = { connect: document.getElementById('connectG'), sync: document.getElementById('syncNow'), imp: document.getElementById('importNow') };
+  if(sheetInputs.id){ sheetInputs.id.value = GS.SHEET_ID; }
+  if(sheetInputs.name){ sheetInputs.name.value = GS.SHEET_NAME; }
+  if(sheetInputs.auto){ sheetInputs.auto.checked = GS.autosync; sheetInputs.auto.addEventListener('change',()=>{ GS.autosync = sheetInputs.auto.checked; localStorage.setItem('autosync', GS.autosync?'1':'0'); }); }
+
+  async function gapiReady(){
+    await new Promise(res=>{ if(window.gapi){ res(); } else { const t = setInterval(()=>{ if(window.gapi){ clearInterval(t); res(); } }, 50); } });
+    await new Promise(res=> gapi.load('client:auth2', res));
+  }
+  async function ginit(){
+    await gapiReady();
+    await gapi.client.init({ apiKey: GS.API_KEY, clientId: GS.CLIENT_ID, discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'], scope: GS.SCOPE });
+    return gapi.auth2.getAuthInstance();
+  }
+  async function ensureSignedIn(){
+    const auth = await ginit();
+    if(!auth.isSignedIn.get()) await auth.signIn();
+    return true;
+  }
+  function requireSheetConfig(){
+    GS.SHEET_ID = sheetInputs.id.value.trim(); GS.SHEET_NAME = sheetInputs.name.value.trim()||'Sheet1';
+    if(!GS.SHEET_ID){ alert('Enter a Google Sheet ID'); return false; }
+    localStorage.setItem('sheetId', GS.SHEET_ID); localStorage.setItem('sheetName', GS.SHEET_NAME); return true;
+  }
+  async function ensureHeader(){
+    const range = `${GS.SHEET_NAME}!A1:J1`;
+    const hdr = ['id','name','email','phone','attending','guests','notes','createdAt','updatedAt','checked'];
+    const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: GS.SHEET_ID, range });
+    if(!res.result.values || !res.result.values.length){
+      await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: GS.SHEET_ID, range, valueInputOption:'RAW', resource:{ values:[hdr] } });
+    }
+  }
+  function toRows(list){
+    const rows = [];
+    for(const r of list){
+      rows.push([
+        r.id,
+        r.name,
+        r.email,
+        r.phone||'',
+        r.attending,
+        Number(r.guests||1),
+        (r.notes||'').replace(/\n/g,' '),
+        new Date(r.createdAt).toISOString(),
+        r.updatedAt? new Date(r.updatedAt).toISOString():'',
+        r.checked? 'TRUE':'FALSE'
+      ]);
+    }
+    return rows;
+  }
+  async function syncAll(){
+    if(!requireSheetConfig()) return;
+    await ensureSignedIn(); await ensureHeader();
+    const range = `${GS.SHEET_NAME}!A2:J`; // overwrite body
+    // Clear existing
+    await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: GS.SHEET_ID, range });
+    // Write current
+    const rows = toRows(state.records);
+    if(rows.length){
+      await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: GS.SHEET_ID, range, valueInputOption:'RAW', resource:{ values: rows } });
+    }
+    alert('Synced to Google Sheets');
+  }
+  async function importAll(){
+    if(!requireSheetConfig()) return;
+    await ensureSignedIn(); await ensureHeader();
+    const range = `${GS.SHEET_NAME}!A2:J`;
+    const res = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: GS.SHEET_ID, range });
+    const vals = res.result.values||[];
+    const recs = vals.map(v=>({ id:v[0]||crypto.randomUUID(), name:v[1]||'', email:v[2]||'', phone:v[3]||'', attending:(v[4]||'Yes')==='No'?'No':'Yes', guests:Number(v[5]||1), notes:v[6]||'', createdAt: v[7]? Date.parse(v[7]): Date.now(), updatedAt: v[8]? Date.parse(v[8]): null, checked: (String(v[9]||'').toUpperCase()==='TRUE') }));
+    state.records = recs; save();
+    alert('Imported from Google Sheets');
+  }
+  const debounced = (fn, ms=1200)=> { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); } };
+  const autoSync = debounced(()=>{ if(GS.autosync) syncAll().catch(()=>{}); }, 1500);
+
+  if(gBtns.connect) gBtns.connect.addEventListener('click', ()=> ensureSignedIn().then(()=>alert('Google connected')).catch(err=>alert('Google connect failed: '+err?.error||err)) );
+  if(gBtns.sync) gBtns.sync.addEventListener('click', ()=> syncAll().catch(e=>alert('Sync failed: '+(e?.result?.error?.message||e))));
+  if(gBtns.imp) gBtns.imp.addEventListener('click', ()=> importAll().catch(e=>alert('Import failed: '+(e?.result?.error?.message||e))));
+
+  // hook into local save()
+  const _save = save;
+  save = function(){ _save(); if(GS.autosync){ autoSync(); } }
   </script>
 </body>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </html>
