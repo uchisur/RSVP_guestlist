@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Event RSVP · Guest List</title>
+  <meta name="description" content="Simple RSVP site with built‑in guest list, admin view, and CSV export. All local—no backend required." />
+  <style>
+    :root{
+      --bg:#0b0b10; --card:#12121a; --muted:#a0a0b8; --text:#f3f4f6; --brand:#8b5cf6; --brand-2:#22d3ee; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+      --ring: 0 0 0 3px color-mix(in oklab, var(--brand) 35%, transparent);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji"; color:var(--text); background: radial-gradient(1200px 800px at 10% 0%, #111127 0%, #0b0b10 45%) fixed, var(--bg);}
+    .container{max-width:1100px; margin:24px auto; padding:16px}
+    .grid{display:grid; gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns: 1.1fr 1fr}}
+    .card{background:linear-gradient(180deg, #151524aa, #101018cc); border:1px solid #2a2a3b; border-radius:18px; padding:18px; backdrop-filter:saturate(120%) blur(6px); box-shadow:0 6px 24px #0006}
+    h1{margin:0 0 6px; font-size:clamp(24px, 3vw, 36px); letter-spacing:.4px}
+    .sub{color:var(--muted); margin:0 0 16px; font-size:14px}
+    label{display:block; font-weight:600; margin:14px 0 6px}
+    input, select, textarea{width:100%; background:#0e0e17; color:var(--text); border:1px solid #2a2a3b; border-radius:12px; padding:12px 14px; outline:0; transition:.15s ease;}
+    input:focus, select:focus, textarea:focus{border-color:var(--brand); box-shadow: var(--ring)}
+    textarea{min-height:96px; resize:vertical}
+    .row{display:grid; gap:12px; grid-template-columns:1fr}
+    @media(min-width:640px){.row{grid-template-columns:1fr 1fr}}
+    .btn{display:inline-flex; align-items:center; gap:8px; border:1px solid #383852; background:linear-gradient(180deg, #201f35, #19192a); color:var(--text); padding:12px 14px; border-radius:12px; cursor:pointer; font-weight:700}
+    .btn:hover{filter:brightness(1.08)}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{border-color:#5136c6; background:linear-gradient(180deg, color-mix(in oklab, var(--brand) 30%, #1b1b2f), #1a1832)}
+    .btn.ghost{background:#0f0f18; border-color:#2b2b3c}
+    .flex{display:flex; align-items:center; gap:12px}
+    .spacer{flex:1}
+    .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a2a3b; background:#0e0e17; color:var(--muted); font-size:12px}
+    .hint{color:var(--muted); font-size:12px}
+    .success{color:var(--ok)}
+    .warn{color:var(--warn)}
+    .danger{color:var(--err)}
+    table{width:100%; border-collapse:collapse; border-spacing:0;}
+    th, td{padding:12px 10px; border-bottom:1px solid #26263a; vertical-align:top}
+    th{position:sticky; top:0; background:#12121a; z-index:1; text-align:left; font-size:13px; color:#cfd1de}
+    tr:hover td{background:#10101a}
+    .pill{padding:6px 10px; border-radius:999px; font-size:12px; border:1px solid #2b2b3d}
+    .yes{background: #0d1b12; color:#8af0ad; border-color:#1c3b2a}
+    .no{background:#1b1313; color:#f59c9c; border-color:#402424}
+    .switch{position:relative; width:44px; height:24px}
+    .switch input{display:none}
+    .slider{position:absolute; inset:0; background:#2a2a3b; border-radius:999px; transition:.15s}
+    .slider::before{content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:999px; transition:.15s}
+    .switch input:checked + .slider{background:#2f5242}
+    .switch input:checked + .slider::before{transform:translateX(20px)}
+    .foot{margin-top:12px; color:var(--muted); font-size:12px}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:#0c0c12; border:1px solid #2a2a3b; border-radius:8px; padding:2px 6px; font-size:12px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="container grid">
+    <!-- RSVP Card -->
+    <section class="card">
+      <h1>RSVP</h1>
+      <p class="sub">Let us know if you're coming ✈️ — you'll get a confirmation on-screen and we'll add you to the guest list. No account needed.</p>
+      <form id="rsvpForm" novalidate>
+        <label for="name">Full name *</label>
+        <input id="name" name="name" required placeholder="e.g., Suraya Bakboord" autocomplete="name" />
+
+        <div class="row">
+          <div>
+            <label for="email">Email *</label>
+            <input id="email" name="email" type="email" required placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div>
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" placeholder="optional" autocomplete="tel" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="attending">Attending? *</label>
+            <select id="attending" name="attending" required>
+              <option value="">Select…</option>
+              <option value="Yes">Yes, I'll be there</option>
+              <option value="No">No, can't make it</option>
+            </select>
+          </div>
+          <div>
+            <label for="guests"># of guests (incl. you)</label>
+            <input id="guests" name="guests" type="number" min="1" step="1" value="1" />
+          </div>
+        </div>
+
+        <label for="notes">Notes (dietary, accessibility, etc.)</label>
+        <textarea id="notes" name="notes" placeholder="Anything we should know?"></textarea>
+
+        <div class="flex">
+          <button class="btn primary" type="submit">Submit RSVP</button>
+          <span id="msg" class="hint"></span>
+          <span class="spacer"></span>
+          <button class="btn ghost" type="button" id="openAdmin">Open guest list</button>
+        </div>
+        <p class="foot">By submitting, you agree to be listed in our local guest list. Data is stored in your browser via <span class="kbd">localStorage</span>. For a shared list, export & share CSV.</p>
+      </form>
+    </section>
+
+    <!-- Admin / Guest List Card -->
+    <section class="card" id="adminCard">
+      <div class="flex">
+        <h2 style="margin:0">Guest List</h2>
+        <span class="badge" id="statsBadge">—</span>
+        <span class="spacer"></span>
+        <input id="adminCode" placeholder="PIN to unlock (default 1234)" style="max-width:240px" />
+        <button class="btn" id="unlockBtn">Unlock</button>
+      </div>
+      <p class="sub">Search, filter, check‑in, and export RSVPs as CSV. This panel is locked for visitors.</p>
+
+      <div id="adminControls" class="hidden">
+        <div class="flex" style="gap:8px; flex-wrap:wrap; margin-bottom:10px">
+          <input id="search" placeholder="Search name/email/notes…" style="min-width:200px" />
+          <select id="filterAtt">
+            <option value="all">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+          <button class="btn" id="exportCsv">Export CSV</button>
+          <button class="btn" id="clearAll" title="Danger: delete everything">Clear All</button>
+        </div>
+        <div style="overflow:auto; max-height:520px; border:1px solid #2a2a3b; border-radius:14px">
+          <table id="table">
+            <thead>
+              <tr>
+                <th style="width:22ch">Name</th>
+                <th style="width:26ch">Email</th>
+                <th>Attending</th>
+                <th>Guests</th>
+                <th>Notes</th>
+                <th>Added</th>
+                <th>Checked‑in</th>
+                <th style="width:14ch">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="foot">Tip: press <span class="kbd">/</span> to focus search · press <span class="kbd">E</span> to export CSV</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  // --- Storage & state ---
+  const KEY = 'rsvpRecords.v1';
+  const PIN_KEY = 'rsvpAdminPin.v1';
+  const state = { records: load(), pin: loadPin(), unlocked:false, filters:{q:'', att:'all'} };
+
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || []; }catch{ return []; } }
+  function save(){ localStorage.setItem(KEY, JSON.stringify(state.records)); refresh(); }
+  function loadPin(){ return localStorage.getItem(PIN_KEY) || '1234'; }
+  function savePin(p){ localStorage.setItem(PIN_KEY, p); }
+
+  // --- Helpers ---
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const fmtDate = d => new Date(d).toLocaleString();
+
+  // --- Form handling ---
+  const form = $('#rsvpForm');
+  const msg = $('#msg');
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const data = new FormData(form);
+    const name = (data.get('name')||'').trim();
+    const email = (data.get('email')||'').trim();
+    const phone = (data.get('phone')||'').trim();
+    const attending = data.get('attending');
+    const guests = Math.max(1, parseInt(data.get('guests')||'1',10));
+    const notes = (data.get('notes')||'').trim();
+
+    if(!name || !email || !attending){
+      msg.textContent = 'Please fill the required fields.'; msg.className = 'hint warn'; return;
+    }
+    // Prevent accidental dupes by email + attending
+    const exists = state.records.find(r=>r.email.toLowerCase()===email.toLowerCase());
+    if(exists){
+      // Update existing
+      exists.name=name; exists.phone=phone; exists.attending=attending; exists.guests=guests; exists.notes=notes; exists.updatedAt=Date.now();
+    }else{
+      state.records.unshift({ id:crypto.randomUUID(), name,email,phone,attending,guests,notes, createdAt:Date.now(), updatedAt:null, checked:false });
+    }
+    save();
+    form.reset(); $('#guests').value=1; msg.textContent='RSVP saved ✔'; msg.className='hint success';
+    setTimeout(()=>{ msg.textContent=''; msg.className='hint'; }, 2000);
+  });
+
+  // --- Admin unlock ---
+  const openAdminBtn = $('#openAdmin');
+  const adminCard = $('#adminCard');
+  const adminControls = $('#adminControls');
+  const adminCode = $('#adminCode');
+  const unlockBtn = $('#unlockBtn');
+
+  openAdminBtn.addEventListener('click', ()=>{
+    adminCard.scrollIntoView({behavior:'smooth'});
+    adminCode.focus();
+  });
+  unlockBtn.addEventListener('click', unlock);
+  adminCode.addEventListener('keydown', e=>{ if(e.key==='Enter') unlock(); });
+
+  function unlock(){
+    const v = adminCode.value.trim();
+    if(!v){
+      // First time: allow changing default PIN after entering empty string
+      if(confirm('No PIN entered. Set a new admin PIN now?')){
+        const np = prompt('Enter new PIN (min 4 chars)')||'';
+        if(np.length>=4){ savePin(np); alert('PIN set! Use this to unlock next time.'); }
+      }
+      return;
+    }
+    if(v === state.pin){
+      state.unlocked=true; adminControls.classList.remove('hidden'); adminCode.value=''; adminCode.placeholder='Admin unlocked'; adminCode.disabled=true; unlockBtn.disabled=true; refresh();
+    }else{
+      alert('Wrong PIN');
+    }
+  }
+
+  // --- Table rendering ---
+  const tbody = $('#tbody');
+  const search = $('#search');
+  const filterAtt = $('#filterAtt');
+  const statsBadge = $('#statsBadge');
+  search.addEventListener('input', ()=>{ state.filters.q=search.value; refresh(); });
+  filterAtt.addEventListener('change', ()=>{ state.filters.att=filterAtt.value; refresh(); });
+
+  function filtered(){
+    const q = state.filters.q.toLowerCase();
+    return state.records.filter(r=>{
+      if(state.filters.att!=='all' && r.attending!==state.filters.att) return false;
+      if(!q) return true;
+      return [r.name, r.email, r.notes].some(x => (x||'').toLowerCase().includes(q));
+    });
+  }
+
+  function refresh(){
+    // Stats
+    const yes = state.records.filter(r=>r.attending==='Yes');
+    const no = state.records.filter(r=>r.attending==='No');
+    const totalGuests = yes.reduce((a,b)=>a+(Number(b.guests)||0),0);
+    statsBadge.textContent = `${yes.length} yes / ${no.length} no · guests ${totalGuests}`;
+
+    // Body
+    tbody.innerHTML = '';
+    for(const r of filtered()){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(r.name)}</strong><div class="hint">${r.phone?escapeHtml(r.phone):''}</div></td>
+        <td>${escapeHtml(r.email)}</td>
+        <td><span class="pill ${r.attending==='Yes'?'yes':'no'}">${r.attending}</span></td>
+        <td>${r.guests||1}</td>
+        <td>${escapeHtml(r.notes||'')}</td>
+        <td><span class="hint" title="Updated: ${r.updatedAt?fmtDate(r.updatedAt):'—'}">${fmtDate(r.createdAt)}</span></td>
+        <td>
+          <label class="switch" title="Mark checked‑in">
+            <input type="checkbox" ${r.checked? 'checked':''} data-id="${r.id}" class="checkin" />
+            <span class="slider"></span>
+          </label>
+        </td>
+        <td>
+          <button class="btn ghost edit" data-id="${r.id}">Edit</button>
+          <button class="btn ghost del" data-id="${r.id}">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Wire row actions
+    tbody.querySelectorAll('.del').forEach(b=> b.addEventListener('click', ()=> del(b.dataset.id)));
+    tbody.querySelectorAll('.edit').forEach(b=> b.addEventListener('click', ()=> edit(b.dataset.id)));
+    tbody.querySelectorAll('.checkin').forEach(ch=> ch.addEventListener('change', ()=> toggleCheck(ch.dataset.id, ch.checked)));
+  }
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+
+  function del(id){
+    if(!confirm('Delete this RSVP?')) return;
+    state.records = state.records.filter(r=>r.id!==id); save();
+  }
+
+  function edit(id){
+    const r = state.records.find(x=>x.id===id); if(!r) return;
+    const name = prompt('Name', r.name); if(name===null) return;
+    const email = prompt('Email', r.email); if(email===null) return;
+    const phone = prompt('Phone', r.phone||''); if(phone===null) return;
+    const attending = prompt('Attending (Yes/No)', r.attending); if(attending===null) return;
+    const guests = Number(prompt('# of guests (incl. you)', r.guests||1)||1);
+    const notes = prompt('Notes', r.notes||''); if(notes===null) return;
+    Object.assign(r,{name,email,phone,attending:attending==='No'?'No':'Yes',guests,notes,updatedAt:Date.now()});
+    save();
+  }
+
+  function toggleCheck(id, val){ const r = state.records.find(x=>x.id===id); if(!r) return; r.checked= !!val; r.updatedAt=Date.now(); save(); }
+
+  // --- Export CSV ---
+  $('#exportCsv').addEventListener('click', ()=>{
+    const rows = [
+      ['id','name','email','phone','attending','guests','notes','createdAt','updatedAt','checked']
+    ];
+    for(const r of filtered()){
+      rows.push([r.id,r.name,r.email,r.phone||'',r.attending,r.guests||1,(r.notes||'').replace(/\n/g,' '), new Date(r.createdAt).toISOString(), r.updatedAt? new Date(r.updatedAt).toISOString():'', r.checked?'TRUE':'FALSE']);
+    }
+    const csv = rows.map(row=> row.map(cell=>`"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'guest-list.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // --- Dangerous: clear all ---
+  $('#clearAll').addEventListener('click', ()=>{
+    if(confirm('This will delete ALL RSVPs. Type DELETE to confirm.') && prompt('Type DELETE to confirm')==='DELETE'){
+      state.records=[]; save();
+    }
+  });
+
+  // --- Keyboard shortcuts ---
+  window.addEventListener('keydown', (e)=>{
+    if(!state.unlocked) return;
+    if(e.key === '/') { e.preventDefault(); search.focus(); }
+    if(e.key.toLowerCase() === 'e') { e.preventDefault(); $('#exportCsv').click(); }
+  });
+
+  // First paint
+  refresh();
+  </script>
+</body>
+</html>
